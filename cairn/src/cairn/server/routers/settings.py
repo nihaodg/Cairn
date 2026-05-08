@@ -135,8 +135,8 @@ def _build_healthcheck_cmd(worker_type: str, api_key: str, base_url: str, model:
             "curl", "-sS", "--fail", "-o", "/dev/null",
             "-H", f"Authorization: Bearer {api_key}",
             "-H", "content-type: application/json",
-            "-d", f'{{"model":"{model}","input":"ping","stream":false}}',
-            f"{base_url.rstrip('/')}/responses",
+            "-d", f'{{"model":"{model}","messages":[{{"role":"user","content":"ping"}}],"stream":false}}',
+            f"{base_url.rstrip('/')}/chat/completions",
         ]
     elif worker_type == "pi":
         return [
