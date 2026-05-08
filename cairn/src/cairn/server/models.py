@@ -36,6 +36,20 @@ class WorkerConfigs(BaseModel):
     pi: WorkerConfig
 
 
+class WorkerTestRequest(BaseModel):
+    name: str
+    type: str
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+class WorkerTestResult(BaseModel):
+    success: bool
+    message: str
+    latency_ms: int | None = None
+
+
 class Fact(BaseModel):
     id: str
     description: str

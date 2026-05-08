@@ -1008,7 +1008,20 @@
     <div class="space-y-4">
       <template x-for="(config, workerName) in workerConfigsForm" :key="workerName">
         <div class="border border-slate-200 rounded-xl p-4">
-          <h4 class="text-sm font-medium text-slate-600 mb-1" x-text="getWorkerDisplayName(workerName)"></h4>
+          <div class="flex items-center justify-between mb-1">
+            <h4 class="text-sm font-medium text-slate-600" x-text="getWorkerDisplayName(workerName)"></h4>
+            <div class="flex items-center gap-2">
+              <span x-show="workerTestStatus[workerName] !== undefined"
+                :class="workerTestStatus[workerName]?.success ? 'text-emerald-500' : 'text-rose-500'"
+                class="text-[11px]" x-text="workerTestStatus[workerName]?.message || ''"></span>
+              <button @click="testWorkerConfig(workerName)"
+                :disabled="testingWorker === workerName"
+                class="px-2 py-1 text-[11px] rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition disabled:opacity-50">
+                <span x-show="testingWorker !== workerName">Test</span>
+                <span x-show="testingWorker === workerName">Testing...</span>
+              </button>
+            </div>
+          </div>
           <p class="text-[11px] text-slate-400 mb-3" x-text="getWorkerDescription(workerName)"></p>
           <div class="space-y-3">
             <div>
@@ -1147,6 +1160,8 @@ function cairnApp() {
       codex: { name: 'codex', type: 'codex', api_key: '', base_url: '', model: '' },
       pi: { name: 'pi', type: 'pi', api_key: '', base_url: '', model: '' },
     },
+    workerTestStatus: {},
+    testingWorker: null,
     deleteConfirm: { id: '', title: '' },
     isDeletingProject: false,
     yamlPreviewTitle: '',
@@ -3483,6 +3498,31 @@ function cairnApp() {
         this.showSettings = false;
         this.showToast('Server settings saved');
       } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async testWorkerConfig(workerName) {
+      const config = this.workerConfigsForm[workerName];
+      if (!config) return;
+      if (!config.api_key || !config.base_url || !config.model) {
+        this.showToast('Please fill in all fields before testing', 'error');
+        return;
+      }
+      this.testingWorker = workerName;
+      this.workerTestStatus[workerName] = undefined;
+      try {
+        const result = await this.api('POST', '/settings/workers/test', config);
+        this.workerTestStatus[workerName] = result;
+        if (result.success) {
+          this.showToast(`${workerName} test passed (${result.latency_ms}ms)`);
+        } else {
+          this.showToast(`Test failed: ${result.message}`, 'error');
+        }
+      } catch(e) {
+        this.workerTestStatus[workerName] = { success: false, message: e.message };
+        this.showToast(`Test failed: ${e.message}`, 'error');
+      } finally {
+        this.testingWorker = null;
+      }
     },
   };
 }

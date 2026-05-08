@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+import subprocess
+import time
 
 from cairn.server.db import get_conn
-from cairn.server.models import ApiKeyEntry, ApiKeys, Settings, WorkerConfig, WorkerConfigs
+from cairn.server.models import ApiKeyEntry, ApiKeys, Settings, WorkerConfig, WorkerConfigs, WorkerTestRequest, WorkerTestResult
 
 router = APIRouter(tags=["settings"])
 
@@ -89,3 +91,60 @@ def update_worker_configs(body: WorkerConfigs):
                 (name, config["type"], config["api_key"], config["base_url"], config["model"]),
             )
     return body
+
+
+@router.post("/settings/workers/test", response_model=WorkerTestResult)
+def test_worker_config(body: WorkerTestRequest):
+    if not body.api_key:
+        return WorkerTestResult(success=False, message="API Key is required")
+    if not body.base_url:
+        return WorkerTestResult(success=False, message="Base URL is required")
+    if not body.model:
+        return WorkerTestResult(success=False, message="Model is required")
+
+    cmd = _build_healthcheck_cmd(body.type, body.api_key, body.base_url, body.model)
+    started = time.perf_counter()
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        if result.returncode == 0:
+            return WorkerTestResult(success=True, message="Connection successful", latency_ms=latency_ms)
+        else:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            if not stderr:
+                stderr = result.stdout.decode("utf-8", errors="replace").strip()
+            return WorkerTestResult(success=False, message=stderr[:500] if stderr else "Request failed")
+    except subprocess.TimeoutExpired:
+        return WorkerTestResult(success=False, message="Request timeout (30s)")
+    except Exception as exc:
+        return WorkerTestResult(success=False, message=str(exc))
+
+
+def _build_healthcheck_cmd(worker_type: str, api_key: str, base_url: str, model: str) -> list[str]:
+    if worker_type == "claudecode":
+        return [
+            "curl", "-sS", "--fail", "-o", "/dev/null",
+            "-H", f"Authorization: Bearer {api_key}",
+            "-H", "anthropic-version: 2023-06-01",
+            "-H", "content-type: application/json",
+            "-d", f'{{"model":"{model}","max_tokens":10,"messages":[{{"role":"user","content":"ping"}}]}}',
+            f"{base_url.rstrip('/')}/v1/messages",
+        ]
+    elif worker_type == "codex":
+        return [
+            "curl", "-sS", "--fail", "-o", "/dev/null",
+            "-H", f"Authorization: Bearer {api_key}",
+            "-H", "content-type: application/json",
+            "-d", f'{{"model":"{model}","input":"ping","stream":false}}',
+            f"{base_url.rstrip('/')}/responses",
+        ]
+    elif worker_type == "pi":
+        return [
+            "curl", "-sS", "--fail", "-o", "/dev/null",
+            "-H", f"Authorization: Bearer {api_key}",
+            "-H", "content-type: application/json",
+            "-d", f'{{"model":"{model}","messages":[{{"role":"user","content":"ping"}}]}}',
+            f"{base_url.rstrip('/')}/chat/completions",
+        ]
+    else:
+        raise HTTPException(400, f"Unknown worker type: {worker_type}")

@@ -52,6 +52,42 @@ def communicate_timeout(timeout_seconds: int, grace_seconds: int = PROCESS_COMMU
     return timeout_seconds + grace_seconds
 
 
+def _apply_db_env_overrides(worker: WorkerConfig) -> None:
+    try:
+        from cairn.server.db import get_conn
+        type_to_db_name = {
+            "claudecode": "claude_code",
+            "codex": "codex",
+            "pi": "pi",
+        }
+        db_name = type_to_db_name.get(worker.type)
+        if not db_name:
+            return
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT api_key, base_url, model, name FROM worker_configs WHERE name = ?",
+                (db_name,),
+            ).fetchone()
+            if not row:
+                return
+            env_map = {
+                "claudecode": {"api_key": "ANTHROPIC_AUTH_TOKEN", "base_url": "ANTHROPIC_BASE_URL", "model": "ANTHROPIC_MODEL"},
+                "codex": {"api_key": "OPENAI_API_KEY", "base_url": "CODEX_BASE_URL", "model": "CODEX_MODEL"},
+                "pi": {"api_key": "PI_API_KEY", "base_url": "PI_BASE_URL", "model": "PI_MODEL"},
+            }
+            mapping = env_map.get(worker.type, {})
+            if row["api_key"]:
+                worker.env[mapping.get("api_key", "")] = row["api_key"]
+            if row["base_url"]:
+                worker.env[mapping.get("base_url", "")] = row["base_url"]
+            if row["model"]:
+                worker.env[mapping.get("model", "")] = row["model"]
+            if row["name"]:
+                worker.name = row["name"]
+    except Exception:
+        pass
+
+
 def run_healthcheck(
     container_manager: ContainerManager,
     container_name: str,
@@ -62,6 +98,7 @@ def run_healthcheck(
     lease: HeartbeatLease | None = None,
     cancellation: TaskCancellation | None = None,
 ) -> HealthcheckRun:
+    _apply_db_env_overrides(worker)
     process = container_manager.build_exec_process(
         container_name,
         dict(worker.env),
@@ -103,6 +140,7 @@ def run_worker_process(
         phase,
         timeout_seconds,
     )
+    _apply_db_env_overrides(worker)
     process = container_manager.build_exec_process(
         container_name,
         dict(worker.env),
