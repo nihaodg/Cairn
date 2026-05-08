@@ -154,19 +154,38 @@ docker compose up --build
 This starts `cairn-server` on port `8000` and `cairn-dispatcher` once the server passes its health check. The dispatcher mounts `dispatch.yaml` from the project root and connects to Docker via the host socket. Data is persisted to `./datas/cairn/`.
  
 ### Manual
- 
+
 Edit `dispatch.yaml` and fill in your LLM endpoints and API keys, then:
- 
+
 ```bash
 # Start the server
 uv run --project cairn cairn serve
- 
+
 # Run the dispatcher
 uv run --project cairn cairn dispatch --config dispatch.yaml
- 
+
 # Run startup health checks only
 uv run --project cairn cairn dispatch --config dispatch.yaml --startup-healthcheck-only
 ```
+
+### Configure API Keys via Web UI
+
+Cairn provides a built-in Settings interface for configuring Worker API Keys directly from the web UI. After starting the server, navigate to `http://localhost:8000` and click the ⚙️ settings icon in the top-right corner.
+
+The **Worker Configurations** section allows you to configure three worker types:
+
+| Worker | Strengths | API Type |
+|--------|----------|----------|
+| **Claude Code** | Strong reasoning, analysis & planning | Anthropic-compatible |
+| **Codex** | Code generation & execution | OpenAI-compatible |
+| **Pi** | Fast exploration & quick iterations | OpenAI-compatible |
+
+Each worker supports:
+- **API Key**: Your API key (supports various proxy/gateway services)
+- **Base URL**: Custom endpoint URL (e.g., OpenRouter, Cloudflare AI Gateway, custom proxies)
+- **Model**: The model name to use with this worker
+
+> **Note**: These settings are stored in the Cairn database and persist across restarts. For rapid iteration or production deployments, you may also configure API keys directly in `dispatch.yaml`.
 
 ## Disclaimer
 

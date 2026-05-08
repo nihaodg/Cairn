@@ -983,18 +983,45 @@
 
 <!-- Settings -->
 <div x-show="showSettings" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showSettings = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-200/60" @click.stop>
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200/60 max-h-[90vh] overflow-y-auto" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-4">Server Settings</h3>
-    <div>
-      <label class="text-[11px] text-slate-400 mb-1 block font-medium">Intent timeout (seconds)</label>
-      <input type="number" x-model.number="settingsForm.intent_timeout" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+    <div class="space-y-4">
+      <div>
+        <label class="text-[11px] text-slate-400 mb-1 block font-medium">Intent timeout (seconds)</label>
+        <input type="number" x-model.number="settingsForm.intent_timeout" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+      </div>
+      <div>
+        <label class="text-[11px] text-slate-400 mb-1 block font-medium">Reason timeout (seconds)</label>
+        <input type="number" x-model.number="settingsForm.reason_timeout" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+        <p class="text-[11px] text-slate-400 mt-2">Shared backend configuration.</p>
+      </div>
     </div>
-    <div class="mt-4">
-      <label class="text-[11px] text-slate-400 mb-1 block font-medium">Reason timeout (seconds)</label>
-      <input type="number" x-model.number="settingsForm.reason_timeout" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
-      <p class="text-[11px] text-slate-400 mt-2">Shared backend configuration.</p>
+
+    <h3 class="text-base font-semibold text-slate-700 mt-6 mb-4">Worker Configurations</h3>
+    <div class="space-y-4">
+      <template x-for="(config, workerName) in workerConfigsForm" :key="workerName">
+        <div class="border border-slate-200 rounded-xl p-4">
+          <h4 class="text-sm font-medium text-slate-600 mb-1" x-text="getWorkerDisplayName(workerName)"></h4>
+          <p class="text-[11px] text-slate-400 mb-3" x-text="getWorkerDescription(workerName)"></p>
+          <div class="space-y-3">
+            <div>
+              <label class="text-[11px] text-slate-400 mb-1 block font-medium">API Key</label>
+              <input type="password" x-model="config.api_key" placeholder="sk-..." class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400 mb-1 block font-medium">Base URL</label>
+              <input type="text" x-model="config.base_url" placeholder="https://api.example.com/v1" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400 mb-1 block font-medium">Model</label>
+              <input type="text" x-model="config.model" placeholder="model-name" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
-    <div class="flex justify-end gap-2 mt-5">
+
+    <div class="flex justify-end gap-2 mt-6">
       <button @click="showSettings = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Close</button>
       <button @click="saveServerSettings()" class="px-4 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition shadow-sm shadow-brand-200">Save Server</button>
     </div>
@@ -1106,6 +1133,11 @@ function cairnApp() {
     renameForm: { projectId: '', originalTitle: '', title: '' },
     localPrefs: { actor_name: 'Human', layout_mode: 'dagre_tb' },
     settingsForm: { intent_timeout: 5, reason_timeout: 5 },
+    workerConfigsForm: {
+      claude_code: { name: 'claude_code', type: 'claudecode', api_key: '', base_url: '', model: '' },
+      codex: { name: 'codex', type: 'codex', api_key: '', base_url: '', model: '' },
+      pi: { name: 'pi', type: 'pi', api_key: '', base_url: '', model: '' },
+    },
     deleteConfirm: { id: '', title: '' },
     isDeletingProject: false,
     yamlPreviewTitle: '',
@@ -1557,7 +1589,35 @@ function cairnApp() {
         const s = await this.api('GET', '/settings');
         this.settingsForm.intent_timeout = s.intent_timeout;
         this.settingsForm.reason_timeout = s.reason_timeout;
+        await this.loadWorkerConfigs();
       } catch(e) { console.error(e); }
+    },
+
+    async loadWorkerConfigs() {
+      try {
+        const configs = await this.api('GET', '/settings/workers');
+        this.workerConfigsForm = configs;
+      } catch(e) { console.error(e); }
+    },
+
+    async saveWorkerConfigs() {
+      try {
+        await this.api('PUT', '/settings/workers', this.workerConfigsForm);
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    getWorkerDisplayName(name) {
+      const names = { claude_code: 'Claude Code', codex: 'Codex', pi: 'Pi' };
+      return names[name] || name;
+    },
+
+    getWorkerDescription(name) {
+      const desc = {
+        claude_code: 'Strong reasoning, analysis & planning',
+        codex: 'Code generation & execution',
+        pi: 'Fast exploration & quick iterations'
+      };
+      return desc[name] || '';
     },
 
     async loadProject(id) {
@@ -3366,6 +3426,7 @@ function cairnApp() {
     async saveServerSettings() {
       try {
         await this.api('PUT', '/settings', this.settingsForm);
+        await this.saveWorkerConfigs();
         this.showSettings = false;
         this.showToast('Server settings saved');
       } catch(e) { this.showToast(e.message, 'error'); }

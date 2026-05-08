@@ -10,6 +10,32 @@ class Settings(BaseModel):
     reason_timeout: int = Field(ge=5)
 
 
+class ApiKeyEntry(BaseModel):
+    provider: str
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+class WorkerConfig(BaseModel):
+    name: str
+    type: str
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+class ApiKeys(BaseModel):
+    anthropic: ApiKeyEntry
+    openai: ApiKeyEntry
+
+
+class WorkerConfigs(BaseModel):
+    claude_code: WorkerConfig
+    codex: WorkerConfig
+    pi: WorkerConfig
+
+
 class Fact(BaseModel):
     id: str
     description: str
