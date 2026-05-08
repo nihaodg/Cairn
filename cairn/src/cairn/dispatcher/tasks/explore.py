@@ -11,6 +11,7 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
 from cairn.dispatcher.tasks.common import (
+    apply_worker_env_overrides,
     best_effort_release,
     cancel_reason,
     did_timeout,
@@ -37,6 +38,7 @@ def run_explore_task(
     cancellation: TaskCancellation,
 ) -> str:
     driver = get_driver(worker.type)
+    apply_worker_env_overrides(worker)
     task_started = time.perf_counter()
     healthcheck_timeout = config.runtime.healthcheck_timeout
     lease = HeartbeatLease.for_intent(client, project.project.id, intent.id, worker.name, config.runtime.interval)

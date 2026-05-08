@@ -140,24 +140,3 @@ _WORKER_ENV_KEY_MAP: dict[str, dict[str, str]] = {
         "model": "PI_MODEL",
     },
 }
-
-
-def get_worker_env_overrides(worker_name: str) -> dict[str, str]:
-    env_map = _WORKER_ENV_KEY_MAP.get(worker_name, {})
-    if not env_map:
-        return {}
-    overrides = {}
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT api_key, base_url, model FROM worker_configs WHERE name = ?",
-            (worker_name,),
-        ).fetchone()
-        if not row:
-            return {}
-        if row["api_key"]:
-            overrides[env_map["api_key"]] = row["api_key"]
-        if row["base_url"]:
-            overrides[env_map["base_url"]] = row["base_url"]
-        if row["model"]:
-            overrides[env_map["model"]] = row["model"]
-    return overrides

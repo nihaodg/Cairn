@@ -88,6 +88,10 @@ def _apply_db_env_overrides(worker: WorkerConfig) -> None:
         pass
 
 
+def apply_worker_env_overrides(worker: WorkerConfig) -> None:
+    _apply_db_env_overrides(worker)
+
+
 def run_healthcheck(
     container_manager: ContainerManager,
     container_name: str,
