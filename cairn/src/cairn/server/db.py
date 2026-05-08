@@ -108,8 +108,9 @@ def configure(path: Path) -> None:
 
 @contextmanager
 def get_conn() -> Generator[sqlite3.Connection, None, None]:
-    assert _db_path is not None
-    conn = sqlite3.connect(str(_db_path))
+    db_path = _db_path or DEFAULT_DB
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

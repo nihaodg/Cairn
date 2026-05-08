@@ -57,6 +57,7 @@ def serve(host: str, port: int, db_path: str, log_level: str, access_log: bool):
 def dispatch(config_path: Path, once: bool, startup_healthcheck_only: bool, log_level: str):
     """Run the Cairn dispatcher."""
     configure_logging(log_level, bare=startup_healthcheck_only)
+    db.configure(db.DEFAULT_DB)
     loop = DispatcherLoop(config_path)
     try:
         if startup_healthcheck_only:

@@ -98,6 +98,8 @@ def _run_worker_healthcheck(
     timeout_seconds: int,
 ) -> StartupHealthcheckResult:
     driver = get_driver(worker.type)
+    from cairn.dispatcher.tasks.common import apply_worker_env_overrides
+    apply_worker_env_overrides(worker)
     healthcheck = run_healthcheck(
         container_manager,
         container_name,

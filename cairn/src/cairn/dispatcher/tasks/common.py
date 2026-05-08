@@ -76,16 +76,21 @@ def _apply_db_env_overrides(worker: WorkerConfig) -> None:
                 "pi": {"api_key": "PI_API_KEY", "base_url": "PI_BASE_URL", "model": "PI_MODEL"},
             }
             mapping = env_map.get(worker.type, {})
-            if row["api_key"]:
-                worker.env[mapping.get("api_key", "")] = row["api_key"]
-            if row["base_url"]:
-                worker.env[mapping.get("base_url", "")] = row["base_url"]
-            if row["model"]:
-                worker.env[mapping.get("model", "")] = row["model"]
+            db_api_key = row["api_key"] or ""
+            db_base_url = row["base_url"] or ""
+            db_model = row["model"] or ""
+            if db_api_key or db_base_url or db_model:
+                LOG.info("applying db config for %s", db_name)
+                if db_api_key:
+                    worker.env[mapping.get("api_key", "")] = db_api_key
+                if db_base_url:
+                    worker.env[mapping.get("base_url", "")] = db_base_url
+                if db_model:
+                    worker.env[mapping.get("model", "")] = db_model
             if row["name"]:
                 worker.name = row["name"]
-    except Exception:
-        pass
+    except Exception as exc:
+        LOG.warning("failed to apply db env overrides: %s", exc)
 
 
 def apply_worker_env_overrides(worker: WorkerConfig) -> None:
