@@ -467,6 +467,13 @@
           Reopen
         </button>
       </template>
+      <template x-if="!replay.active && project.project.status === 'completed'">
+        <button @click="openReport(project.project.id, project.project.title)"
+          class="px-2.5 py-1 rounded-lg border border-teal-200 text-xs text-teal-600 hover:bg-teal-50 transition flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+          Report
+        </button>
+      </template>
       <button x-show="!replay.active" @click="deleteProject()" class="px-2.5 py-1 rounded-lg border border-rose-200 text-xs text-rose-500 hover:bg-rose-50 hover:text-rose-600 transition flex items-center gap-1.5">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/><path d="M10 10.5v5"/><path d="M14 10.5v5"/></svg>
         Delete
@@ -1038,6 +1045,8 @@
             :class="exportTab === 'yaml' ? 'bg-slate-100 text-slate-700' : 'text-slate-400 hover:text-slate-600'">YAML</button>
           <button @click="switchExportTab('timeline')" class="px-2.5 py-1 text-xs font-medium transition"
             :class="exportTab === 'timeline' ? 'bg-slate-100 text-slate-700' : 'text-slate-400 hover:text-slate-600'">Timeline</button>
+          <button @click="switchExportTab('report')" class="px-2.5 py-1 text-xs font-medium transition"
+            :class="exportTab === 'report' ? 'bg-slate-100 text-slate-700' : 'text-slate-400 hover:text-slate-600'">Report</button>
         </div>
         <p class="text-xs text-slate-400 truncate" x-text="yamlPreviewTitle"></p>
       </div>
@@ -1508,6 +1517,35 @@ function cairnApp() {
       }).join('');
     },
 
+    highlightMarkdown(text) {
+      const lines = String(text ?? '').split('\n');
+      let html = '';
+      let inCodeBlock = false;
+      for (const line of lines) {
+        if (line.startsWith('```')) {
+          inCodeBlock = !inCodeBlock;
+          html += `<div style="white-space:pre;padding:0 16px;background:#1e293b;color:#e2e8f0">${this.escapeHtml(line)}</div>`;
+        } else if (inCodeBlock) {
+          html += `<div style="white-space:pre;padding:0 16px;background:#1e293b;color:#e2e8f0">${this.escapeHtml(line)}</div>`;
+        } else if (line.startsWith('# ')) {
+          html += `<div style="white-space:pre;padding:8px 16px;background:#f8fafc;color:#0f172a;font-size:18px;font-weight:700;border-bottom:1px solid #e2e8f0">${this.escapeHtml(line)}</div>`;
+        } else if (line.startsWith('## ')) {
+          html += `<div style="white-space:pre;padding:6px 16px;background:#f1f5f9;color:#1e293b;font-size:14px;font-weight:700;border-bottom:1px solid #e2e8f0">${this.escapeHtml(line)}</div>`;
+        } else if (line.startsWith('### ')) {
+          html += `<div style="white-space:pre;padding:4px 16px;background:#f8fafc;color:#334155;font-size:13px;font-weight:600">${this.escapeHtml(line)}</div>`;
+        } else if (line.startsWith('- **')) {
+          html += `<div style="white-space:pre;padding:2px 16px;color:#334155">${this.escapeHtml(line)}</div>`;
+        } else if (line.startsWith('---')) {
+          html += `<div style="white-space:pre;padding:8px 16px;border-top:1px solid #e2e8f0;color:#94a3b8">${this.escapeHtml(line)}</div>`;
+        } else if (/^\s*$/.test(line)) {
+          html += `<div style="height:8px"></div>`;
+        } else {
+          html += `<div style="white-space:pre;padding:2px 16px;color:#334155">${this.escapeHtml(line)}</div>`;
+        }
+      }
+      return html;
+    },
+
     projectLabel(projectId, projectTitle) {
       return projectTitle ? `${projectId} - ${projectTitle}` : projectId;
     },
@@ -1537,6 +1575,15 @@ function cairnApp() {
       this.showYamlModal = true;
     },
 
+    async openReport(projectId, projectTitle = '') {
+      if (!projectId) return;
+      this.exportProjectId = projectId;
+      this.yamlPreviewTitle = this.projectLabel(projectId, projectTitle);
+      this.exportTab = 'report';
+      await this.loadExportTab('report');
+      this.showYamlModal = true;
+    },
+
     async switchExportTab(tab) {
       if (tab === this.exportTab) return;
       this.exportTab = tab;
@@ -1548,7 +1595,13 @@ function cairnApp() {
       try {
         const text = await this.fetchText(`/projects/${this.exportProjectId}/export?format=${tab}`);
         this.yamlPreviewText = text;
-        this.yamlPreviewHtml = tab === 'yaml' ? this.highlightYaml(text) : this.highlightTimeline(text);
+        if (tab === 'yaml') {
+          this.yamlPreviewHtml = this.highlightYaml(text);
+        } else if (tab === 'timeline') {
+          this.yamlPreviewHtml = this.highlightTimeline(text);
+        } else if (tab === 'report') {
+          this.yamlPreviewHtml = this.highlightMarkdown(text);
+        }
       } catch (e) {
         this.showToast(e.message, 'error');
       }

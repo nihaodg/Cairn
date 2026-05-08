@@ -150,14 +150,78 @@ def _export_timeline(conn, project_id: str) -> str:
     return "\n\n".join(e[2] for e in events) + "\n"
 
 
+def _export_report(conn, project_id: str) -> str:
+    proj, facts, hints, intents, sources_by_intent = _load_project_data(conn, project_id)
+
+    facts_by_id = {f["id"]: f["description"] for f in facts}
+    intents_by_id = {i["id"]: i for i in intents}
+
+    origin_desc = facts_by_id.get("origin", "未指定")
+    goal_desc = facts_by_id.get("goal", "未指定")
+
+    lines = []
+
+    lines.append(f"# {proj['title']}")
+    lines.append("")
+    lines.append("## 目标")
+    lines.append(f"- **起点**: {origin_desc}")
+    lines.append(f"- **终点**: {goal_desc}")
+    lines.append("")
+
+    concluded_intents = [i for i in intents if i["concluded_at"] and i["to_fact_id"]]
+    if concluded_intents:
+        lines.append("## 探索路径")
+        for i in concluded_intents:
+            from_facts = sources_by_intent.get(i["id"], [])
+            from_str = " → ".join(from_facts) if from_facts else "起点"
+            to_fact_desc = facts_by_id.get(i["to_fact_id"], i["to_fact_id"])
+            ts = format_export_timestamp(i["concluded_at"]) or ""
+            worker = i["worker"] or i["creator"]
+            lines.append(f"### {i['id']}")
+            lines.append(f"- **时间**: {ts}")
+            lines.append(f"- **执行者**: {worker}")
+            lines.append(f"- **探索方向**: {i['description']}")
+            lines.append(f"- **输入**: {from_str}")
+            lines.append(f"- **发现**: {to_fact_desc}")
+            lines.append("")
+
+    user_facts = [f for f in facts if f["id"] not in ("origin", "goal")]
+    if user_facts:
+        lines.append("## 发现的事实")
+        for f in user_facts:
+            lines.append(f"- {f['description']}")
+        lines.append("")
+
+    if hints:
+        lines.append("## 关键提示")
+        for h in hints:
+            ts = format_export_timestamp(h["created_at"]) or ""
+            lines.append(f"- **{h['creator']}** ({ts}): {h['content']}")
+        lines.append("")
+
+    complete_intent = next((i for i in intents if i["to_fact_id"] == "goal"), None)
+    if complete_intent:
+        lines.append("## 解题总结")
+        lines.append(f"通过 {complete_intent['worker'] or complete_intent['creator']} 的探索，")
+        lines.append(f"成功从 **{origin_desc}** 到达目标 **{goal_desc}**。")
+        lines.append("")
+
+    lines.append("---")
+    lines.append(f"*报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+
+    return "\n".join(lines)
+
+
 @router.get("/projects/{project_id}/export")
 def export_project(project_id: str, format: str = "yaml"):
-    if format not in ("yaml", "timeline"):
-        raise HTTPException(400, "Supported formats: yaml, timeline")
+    if format not in ("yaml", "timeline", "report"):
+        raise HTTPException(400, "Supported formats: yaml, timeline, report")
 
     with get_conn() as conn:
         if format == "timeline":
             text = _export_timeline(conn, project_id)
+        elif format == "report":
+            text = _export_report(conn, project_id)
         else:
             text = _export_yaml(conn, project_id)
 
